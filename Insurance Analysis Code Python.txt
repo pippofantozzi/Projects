@@ -1,0 +1,670 @@
+import csv
+
+import pandas as pd
+
+from collections import Counter
+
+import numpy as np
+
+from itertools import combinations
+
+import scipy.stats as SS
+
+from statistics import mean,median,mode
+
+import Narration2
+
+import Narrations3
+
+
+
+
+
+with open('insurance.csv') as insurance:
+
+        reader = csv.reader(insurance)
+
+        Clients = {}
+
+        count = -1
+
+        for row in reader:
+
+            if count > -1:
+
+                Clients[count] = {'Age':row[0],'Sex':row[1],'BMI':row[2],'Children':row[3],'Smoker':row[4],'Region':row[5],'Charges':row[6]}
+
+            count+=1
+
+
+
+def Variables():
+
+    global Attributes, Categorical
+
+    Attributes = ['Age','Sex','BMI','Children','Smoker','Region','Charges']
+
+    Categorical = ['Sex','Smoker','Region']
+
+    global Numerical 
+
+    Numerical = ['Age','Children','BMI','Charges']
+
+    for att in Attributes:
+
+        globals()[att] = [Clients[row][att] for row in Clients]
+
+Variables()
+
+
+
+def Numerical_Intervals():
+
+    global Intervals
+
+    Intervals = {}
+
+    for Num in Numerical:
+
+        temp_Interval = globals()[Num]
+
+        if(Num != 'Children'):
+
+            temp_Interval = list(map(float,temp_Interval))
+
+            Max = max(temp_Interval)
+
+            Min = min(temp_Interval)
+
+            Rounded_Intervals = round((Max-Min)/10)
+
+        elif(Num == 'Children'):
+
+            Rounded_Intervals = 1
+
+        Intervals[Num] = Rounded_Intervals
+
+Numerical_Intervals()
+
+
+
+
+
+def MostCommon(): #Finds the most common value for every attribute in the dataset
+
+    Most_Common = {}
+
+    for att in Attributes:
+
+        temp = globals()[att]
+
+        Counter_temp = Counter(temp).most_common(1)[0]
+
+        Most_Common[att] = {"Most Common Value:":Counter_temp[0],"Amount:":Counter_temp[1],"Proportion: ":round(Counter_temp[1]/len(temp),2),"Percentage: ":str(round((Counter_temp[1]/len(temp))*100,2))+"%"}    
+
+    return Most_Common
+
+
+
+def MakeNumber(): #Gets the numerical variables from the dataset and makes them float instead of string
+
+      for Num in Numerical:
+
+        temp_num = globals()[Num]
+
+        temp_num = list(map(float,temp_num))
+
+        temp_list = list(np.around(np.array(temp_num),0))
+
+        globals()[Num] = temp_list  
+
+
+
+def Proportions(): #Calculates all the proportions and puts the info into a dictionary instead of showcasing it as just a print statement
+
+    global Min,Max,Remainder, Interval, temp_list, ProportionsDict, Calculation_Of_Correlation
+
+    ProportionsDict = {}
+
+    for Num in Numerical:
+
+        temp_num = globals()[Num]
+
+        temp_num = list(map(float,temp_num))
+
+        temp_list = list(np.around(np.array(temp_num),0))
+
+        Interval = Intervals[Num]
+
+        Min = int(min(temp_list))
+
+        Max = int(max(temp_list))
+
+        Start = Min
+
+        End = Min + Interval
+
+        Remainder = round((Max-Min)%Intervals[Num])
+
+        ProportionsDict[Num] = {"|":"|"}
+
+        for i in range(Min,Max-Remainder,Interval):
+
+            count = sum(i >= Start and i < End for i in temp_list)
+
+            Start_End = str(Start)+" - "+str(End)
+
+            ProportionsDict[Num].update({Start_End:{"Count":count,"Percentage":(str(round((count/len(temp_list))*100,2))+"%")}})
+
+            if(i != Max-Interval-Remainder):
+
+                Start = End
+
+                End = End + Interval
+
+            elif(Remainder > 0):
+
+                Start = End
+
+                End = End + Remainder
+
+                count = sum(i >= Start and i < End for i in temp_list)
+
+                Start_End = str(Start)+" - "+str(End)
+
+                ProportionsDict[Num].update({Start_End:{"Count":count,"Percentage":(str(round((count/len(temp_list))*100,2))+"%")}})
+
+
+
+    for Categ in Categorical:
+
+        temp_cat = globals()[Categ]
+
+        counter = sorted(Counter(temp_cat).items())
+
+        ProportionsDict[Categ] = {"|":"|"}
+
+        for k,v in counter:
+
+            ProportionsDict[Categ].update({k:{"Count":v,"Percentage":(str(round((v/len(temp_list))*100,2))+"%")}})
+
+    return ProportionsDict
+
+
+
+def Correlation_Attribute_Attribute(): #Sees if there is a correlation between two attributes (Smoker and Charges) Except for Region
+
+    global Correlations
+
+    Attributes_Modified = Atts_For_Correlation()
+
+    MakeNumber()
+
+    Comb = list(combinations(Attributes_Modified,2))
+
+    Correlations_Att_Att = {}
+
+    for possible_combinations in Comb:
+
+        corr, pv = SS.pearsonr(globals()[possible_combinations[0]],globals()[possible_combinations[1]])
+
+        Correlations_Att_Att[possible_combinations[0]+' - '+possible_combinations[1]] = corr
+
+    return Correlations_Att_Att
+
+
+
+def Correlation_Attribute_Number_Of_Clients_Numericals():
+
+    Correlations_Att_Count = {}
+
+    temp_dict = {}
+
+    temp_range_list = []
+
+    for Num in Numerical:
+
+        temp_dict[Num] = []
+
+        for k in ProportionsDict[Num].keys():
+
+            if(k != "|"):
+
+                x = k.rfind('-')
+
+                new_key = int(k[:x])
+
+                temp_dict[Num] += [new_key]
+
+        values = list(ProportionsDict[Num].values())[1:]
+
+        values = [x["Count"] for x in values]
+
+        corr, pv = SS.pearsonr(temp_dict[Num],values)
+
+        Correlations_Att_Count[Num] = corr
+
+        
+
+    return Correlations_Att_Count
+
+        
+
+#def Dichotomous_Categorical_To_Binary_Integer(): 
+
+def Atts_For_Correlation():#Modifies the Attribute list so that instead of strings the categoricals are binary (1 or 0) instead of (yes or no) for smokers
+
+    global Temp_Sex,Temp_Smoker, Attributes_Modified
+
+    Attributes_Modified = []
+
+    Temp_Sex = [0 if sex == "female" else 1 for sex in Sex]
+
+    Temp_Smoker = [0 if smo == "no" else 1 for smo in Smoker]
+
+    for i in range(len(Attributes)):
+
+        if(Attributes[i] != "Region"):
+
+            if(Attributes[i] == "Sex"):
+
+                Attributes_Modified.append("Temp_Sex")
+
+            elif(Attributes[i] == "Smoker"):
+
+                Attributes_Modified.append("Temp_Smoker")
+
+            else:
+
+                Attributes_Modified.append(Attributes[i])
+
+    return Attributes_Modified
+
+
+
+def Regions_Calculations(): #Checks highest attribute count in each region, but also checks if divided into 4 parts which parts contain which region the most
+
+    #Find most common values of each, for all attributes connected to southwest, which att is most common for each att
+
+    Atts_For_Correlation()
+
+    global Regions_Calculations_Dict
+
+    Possible_Regions = ["southwest","southeast","northwest","northeast"]
+
+    Regions_Calculations_Dict = {}
+
+    Passed = False
+
+    
+
+    for pr in Possible_Regions:
+
+        Passed = False
+
+        for att in Attributes_Modified:
+
+            if Passed == False:
+
+                Regions_Calculations_Dict[pr] = {att:[]}
+
+            Regions_Calculations_Dict[pr].update({att:[]})
+
+            Passed = True
+
+            Region_Att = list(zip(Region,globals()[att]))
+
+            for k,v in Region_Att:
+
+                if pr in k:
+
+                    Regions_Calculations_Dict[pr][att].append(v)
+
+            Regions_Calculations_Dict[pr][att] = sorted(Regions_Calculations_Dict[pr][att])
+
+    return Regions_Calculations_Dict
+
+
+
+def Regions_Findings():
+
+    global southeast,southwest,northeast,northwest
+
+    Regions_Calculations_Dict = Regions_Calculations()
+
+    Calcs = ["Max","Min","Mode","Median","Mean"]
+
+    Possible_Regions = ["southwest","southeast","northwest","northeast"]
+
+    RegionsDictTesting = {}
+
+    Testing = {}
+
+    for Re in Possible_Regions:
+
+        print(Re.upper(),"CATEGORICAL DICHOTOMOUS FINDINGS","\n")
+
+        print("========================================================")
+
+        for Cat in ["Temp_Sex","Temp_Smoker"]:
+
+            temp_cat = Regions_Calculations_Dict[Re][Cat]
+
+            cat_counter = Counter(Regions_Calculations_Dict[Re][Cat])
+
+            cat_list = list(cat_counter)
+
+            mc = cat_counter.most_common(1)[0]
+
+            if(Cat == "Temp_Sex"):
+
+                if mc[0] == 0:
+
+                    sex = "female"
+
+                else:
+
+                    sex = "male"
+
+                print("Sex: \n")
+
+                print("Most common: ",sex)
+
+                print("Quantity: ",mc[1]," Percentage: ",round(mc[1]/len(temp_cat)*100,2),"%")
+
+                print("-------------------------------------------------- \n ")
+
+            if(Cat == "Temp_Smoker"):
+
+                if mc[0] == 0:
+
+                    smo = "No"
+
+                else:
+
+                    smo = "Yes"
+
+                print("Smoker: \n")
+
+                print("Most common: ",smo)
+
+                print("Quantity: ",mc[1]," Percentage: ",round(mc[1]/len(temp_cat)*100,2),"%")
+
+                print("-------------------------------------------------- \n ")
+
+        for Num in Numerical:
+
+                temp_num = Regions_Calculations_Dict[Re][Num]
+
+                temp_num = list(map(float,temp_num))
+
+                temp_list = list(np.around(np.array(temp_num),0))
+
+                Interval = Intervals[Num]
+
+                Min = int(min(temp_list))
+
+                Max = int(max(temp_list))
+
+                Start = Min
+
+                End = Min + Interval
+
+                Remainder = round((Max-Min)%Intervals[Num])
+
+                Highest = 0
+
+                SecondHighest = 0
+
+                ThirdHighest = 0
+
+                Range = ""
+
+                for i in range(Min,Max-Remainder,Interval):
+
+                    x = sum(i >= Start and i < End for i in temp_list)
+
+                    if(x > Highest):
+
+                        Highest = x
+
+                        Range = "Between "+str(Start)+" and "+str(End)+":"
+
+                    elif(x < Highest and x > SecondHighest):
+
+                        SecondHighest = x
+
+                        SecondRange = "Between "+str(Start)+" and "+str(End)+":"
+
+                    elif(x < SecondHighest and x > ThirdHighest):
+
+                        ThirdHighest = x
+
+                        ThirdRange = "Between "+str(Start)+" and "+str(End)+":"
+
+                    if(i != Max-Interval-Remainder):
+
+                        Start = End
+
+                        End = End + Interval
+
+                    elif(Remainder > 0):
+
+                        Start = End
+
+                        End = End + Remainder
+
+                        if(x > Highest):
+
+                            Highest = x
+
+                            Range = "Between",str(Start),"and",str(End),":"
+
+                RegionsDictTesting[Num] = {"Highest Range":Range,"Range Amount":Highest,"Second Highest Range":SecondRange,"Second Range Amount":SecondHighest,"Third Highest Range":ThirdRange,"Third Range Amount":ThirdHighest}
+
+                for calc in Calcs:
+
+                    RegionsDictTesting[Num].update({calc:round(eval(calc.lower())(temp_list),2)})
+
+        Testing[Re] = dict(RegionsDictTesting)
+
+    return Testing       
+
+
+
+MakeNumber()
+
+
+
+def To_Table():
+
+    print(Narration2.Intro)
+
+    print("""Most Common Attribute Values:
+
+________________________________________________________________________________________________________________________""")
+
+    Most_Common = MostCommon()
+
+    Header_Top,Header_Side, data = [],[],[]
+
+    for k,v in Most_Common.items():
+
+        Header_Side.append(k)
+
+        values = list(v.values())
+
+        keys = list(v.keys())
+
+        if keys not in Header_Top:
+
+            Header_Top = keys
+
+        data.append(values)
+
+    Most_Common_Table = pd.DataFrame(data,Header_Side,Header_Top)
+
+    print(Most_Common_Table)
+
+    print("""
+
+________________________________________________________________________________________________________________________""")
+
+    print(Narrations3.MostCommonDescription)
+
+    Proportions_Dict = Proportions()
+
+    for k,v in Proportions_Dict.items():
+
+        print("Proportions for",k,""":
+
+________________________________________________________________________________________________________________________""")
+
+        Header_Top,Header_Side, data = [],[],[]
+
+        for key,value in v.items():
+
+            if(key not in "|"):
+
+                Header_Top.append(key)
+
+                values = list(value.values())
+
+                keys = list(value.keys())
+
+                if keys not in Header_Side:
+
+                    Header_Side.append(keys)
+
+                data.append(values)
+
+        Proportions_Table = pd.DataFrame(data,Header_Top,Header_Side)
+
+        print(Proportions_Table)
+
+        print("""
+
+________________________________________________________________________________________________________________________""")
+
+    print(Narrations3.Proportions_Description)
+
+    print("""Correlations Between Attributes/Collumns:
+
+________________________________________________________________________________________________________________________""")
+
+    Correlations_Between_Att = dict(sorted(Correlation_Attribute_Attribute().items(), key=lambda x: x[1], reverse=True))
+
+    Header_Top,Header_Side, data = [],[],[]
+
+    for k,v in Correlations_Between_Att.items():
+
+        Header_Side.append(k)
+
+        Header_Top = ["Pearsons Correlation Coefficient"]
+
+        data.append(v)
+
+    First_Correlations = pd.DataFrame(data,Header_Side,Header_Top)
+
+    print(First_Correlations)
+
+    
+
+    print("""
+
+________________________________________________________________________________________________________________________""")
+
+    print("""Correlations Between Attribute and Number of Clients:
+
+________________________________________________________________________________________________________________________""")
+
+    Correlation_Client_Amount = dict(sorted(Correlation_Attribute_Number_Of_Clients_Numericals().items(), key=lambda x: x[1], reverse=False))
+
+    Header_Top,Header_Side, data = [],[],[]
+
+    for k,v in Correlation_Client_Amount.items():
+
+        Header_Side.append(k)
+
+        Header_Top = ["Pearsons Correlation Coefficient"]
+
+        data.append(v)
+
+    Second_Correlation = pd.DataFrame(data,Header_Side,Header_Top)
+
+    print(Second_Correlation)
+
+
+
+    print("""
+
+________________________________________________________________________________________________________________________""")
+
+    print(Narrations3.Correlations_Description)
+
+    print("""Regions Findings:
+
+________________________________________________________________________________________________________________________""")
+
+    Regions_Findings_Dict = Regions_Findings()
+
+    print(Narrations3.Regions_Categorical_Description)
+
+    Header_Top,Header_Side, data = [],[],[]
+
+    for k,v in Regions_Findings_Dict.items():
+
+        print(k.upper(),"FINDINGS:")
+
+        print("""_________________________________________________________________________________________________________""")
+
+        Header_Top = (list((list(v.values())[0]).keys()))
+
+        Header_Side = list(v.keys())
+
+        for key,value in v.items():
+
+            data.append(list(value.values()))
+
+        Regions_Showcase = pd.DataFrame(data,Header_Side,Header_Top)
+
+        data = []
+
+        print(Regions_Showcase)
+
+        print("""
+
+_________________________________________________________________________________________________________""")
+
+    print(Narrations3.Regions_Numerical_Description) 
+
+
+
+
+
+To_Table()
+
+cell_type code
+execution_count
+metadata
+outputs
+source
+metadata
+interpreter
+hash 89d6e1bb8654f6b6f757cb58b657896d04255e103c852616e7bc7969a01d44d6
+kernelspec
+display_name Python 3.9.12 ('base')
+language python
+name python3
+language_info
+codemirror_mode
+name ipython
+version 3
+file_extension .py
+mimetype text/x-python
+name python
+nbconvert_exporter python
+pygments_lexer ipython3
+version 3.9.12
+nbformat 4
+nbformat_minor 4
