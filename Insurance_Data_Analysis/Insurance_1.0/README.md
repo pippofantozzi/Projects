@@ -1,3 +1,4 @@
-#Insurance_1.0
-This program and output look into a variety of different information and correlation/relationship analysis throughout a insurance database containing information on over 1300 clients and their attributes.
+The objective of this project was to extract as much information from a given csv file as possible. The csv file contained info on 1300 clients from a insurance company and their attributes (Age, Number of Children, BMI, Smoker, Sex, Region).
+
+
 
